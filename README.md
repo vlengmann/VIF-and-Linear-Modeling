@@ -45,6 +45,7 @@ The workflow is as follows:
 ## Languages and Utilities used
 - Python
 - Jupyter
+- RStudio
 ---
 ## Environments used
 - Windows 11
