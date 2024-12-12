@@ -1,0 +1,553 @@
+---
+title: "Multicollinearity and Linear Models"
+author: "Vannessa Juarez"
+date: "2024-11-16"
+output: html_document
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+
+# Multicollinearity and Linear Models using R
+
+## Libraries required
+
+```{r, warning=FALSE}
+library(MASS)# For linear regression
+library(ggplot2)
+library(car)# for vif
+library(dplyr)
+library(plotly)
+#library(fastDummies) initially used to create dummeies for make
+
+
+```
+ 
+Next we load the dataset
+```{r, echo= FALSE}
+df = read.csv(file = "C:/Users/Owner/Documents/Rstudio/car price/car-price-cleaned.csv",sep=",",header=TRUE)
+```
+
+## Data Exploration
+```{r}
+dim(df)
+```
+The data set includes `r dim(df)[1]` rows and `r dim(df)[2]` columns
+
+```{r}
+head(df)
+```
+```{r}
+#Check if there exists any NA values or duplicates within the dataset
+#count how many NA values
+table(is.na(df))
+table(duplicated(df))
+```
+Within the data set, there exist no NA values, however there are `r sum(duplicated(df[, 2]))` duplicates. We will keep the duplicates as it makes sense there can exist more of one vehicle with the same price and specifications.
+
+
+# Categorical Variables
+
+```{r}
+#Data Exploration
+# List of columns you want to analyze
+columns_to_check = c("make")
+# we checked model earlier and there were over 2233 different entries
+# Function to get unique values and their counts
+get_unique_counts <- function(column_name) {
+  cat("\nUnique values and counts for", column_name, ":\n")
+  print(table(df[[column_name]]))
+}
+
+# Apply the function to each column in the list without duplicate output using the invisible function
+invisible(lapply(columns_to_check, get_unique_counts))# lapply alwys returns a list
+```
+There exists `r length(unique(df$make))` brands of vehicles
+
+```{r}
+# Count occurrences of each brand
+make_counts = table(df$make)
+
+# Get the top 20 brands by occurrences
+top_20_brands = sort(make_counts, decreasing = TRUE)[1:20]
+
+# Create a barplot for the top 20 brands
+bar_positions = barplot(top_20_brands, main = "Top 20 Vehicles by Make", ylab = "Number of Occurrences", col = "blue",las = 2,cex.names = 0.6,cex.axis = 0.8)
+# Rotate x-axis labels for readability, Reduce the size of x-axis labels, Reduce the size of y-axis ticks
+# Add the counts on top of the bars
+text(
+  x = bar_positions, y = top_20_brands, labels = top_20_brands, pos = 3,cex = 0.6,col = "black" ) #pos 3 puts the labels above the bar, cex=.8 font size for labels
+```
+
+Within the dataset, the top three vehicles within the data set are Maruti, Hyundai, and Honda.
+
+Within the dataset, there exists `r length(unique(df$model))` different models of vehicles.
+
+```{r}
+# Count occurrences of each brand
+model_counts = table(df$model)
+
+# Get the top 20 brands by occurrences
+top_20_model = sort(model_counts, decreasing = TRUE)[1:20]
+
+# Create a barplot for the top 20 brands
+bar_positions = barplot(top_20_model, main = "Top 20 Vehicles by Model", ylab = "Number of Occurrences", col = "blue",las = 2,cex.names = 0.6,cex.axis = 0.8)
+# Rotate x-axis labels for readability, Reduce the size of x-axis labels, Reduce the size of y-axis ticks
+# Add the counts on top of the bars
+text(
+  x = bar_positions, y = top_20_model, labels = top_20_model, pos = 3,cex = 0.6,col = "black" ) #pos 3 puts the labels above the bar, cex=.8 font size for labels
+```
+```{r}
+#print the top 20 models as well
+#top_20_model returns the count of each model
+
+# Group by make and model, count occurrences, and get the top 20 using dplyr
+top_20_table = df %>%
+  count(make, model) %>%
+  arrange(desc(n)) %>% #arrange descending
+  slice(1:20) # top 20 of the table
+
+# Print the table
+print(top_20_table)
+
+```
+The top 9 vehicles models in the data set belong to the Maruti make, with the top vehicle models being the SWIFT DZIRE VDI (288 occurrences) , and the ALTO 800 LXI (189 occurrences). Other models that were within the top 20 models belong to the Hyundai, Renault, Honda and Mahindra.
+
+# Numerical Variables
+
+```{r}
+
+box_hist <- function(df) {
+  # Identify numeric variables
+  numeric_vars = sapply(df, is.numeric)
+  
+  # Loop through each numeric variable
+  for (var in names(df)[numeric_vars]) {
+    # Create and display boxplot
+    boxplot_plot = ggplot(df, aes_string(x = "1", y = var)) +
+      geom_boxplot(notch = TRUE) +
+      geom_boxplot() +
+      labs(title = paste("Boxplot of", var), x = NULL, y = var) +
+      theme_minimal()
+    print(boxplot_plot)
+    
+    # Create and display histogram
+    histogram_plot = ggplot(df, aes_string(x = var)) +
+      geom_histogram( fill = "lightblue", alpha = 0.7, color = "black") +
+      labs(title = paste("Histogram of", var), x = var, y = "Frequency") +
+      theme_minimal()
+    print(histogram_plot)
+  }
+}
+
+
+box_hist(df)
+```
+
+
+
+# Relationships between variables
+```{r}
+# Filter the dataset for top 20 brands
+top_20_makes_df <- df[df$make %in% names(top_20_brands), ]
+# Dot plot for age by make
+age_dot <- ggplot(top_20_makes_df, aes(x = make, y = age)) +
+  geom_jitter(alpha = 0.5, color = "red3", width = 0.2) +
+  labs(title = "Age by Make (Top 20 Brands)", x = "Make", y = "Age") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+print(age_dot)
+
+```
+Most vehicles were under 15 years old. Datsun had mostly newer cars followed by Jaguar, Landrovers, and Renault. The brand with the most age diversity was Maruti. Most Chevrolets were between 5 and 25 years.
+
+```{r}
+# Dot plot for km_driven by make
+km_driven_dot <- ggplot(top_20_makes_df, aes(x = make, y = km_driven)) +
+  geom_jitter(alpha = 0.5, color = "red3", width = 0.2) +
+  scale_y_continuous(limits = c(0, 450000)) +  # Adjust based on typical max value, this does restrict 
+  #a few outliers especially in the Mahindra brand
+  labs(title = "Kilometers Driven by Make (Top 20 Brands)", x = "Make", y = "Kilometers Driven") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+print(km_driven_dot)
+```
+
+Most vehicles in the data frame were driven less than 200k km. The vehicles that had the least amount of miles were the Datsun and Jaguar brands as most vehicles had under 100k km.
+
+```{r}
+#Boxplot of selling_price faceted by the top 20 makes. Made in plotly so its interactive
+
+
+# Create an interactive boxplot faceted by make using Plotly
+boxtop20<- plot_ly(
+  data = top_20_makes_df,
+  x = ~make,
+  y = ~selling_price,
+  type = 'box',
+  color = ~make,
+  colors = "Set1"
+)
+
+boxtop20 <- boxtop20 %>%
+  layout(
+    title = "Boxplot of Selling Price by Top 20 Makes",
+    xaxis = list(title = "Vehicle Make", tickangle = -45),
+    yaxis = list(title = "Selling Price"),
+    showlegend = FALSE  # Hide legend since makes are shown on x-axis
+  )
+
+boxtop20
+
+
+```
+
+Brands that tend to be lower priced are Chevrolet, Datsun, Fiat, Nissan, Renault and Ford. The brands that tend to be the most expensive are Mercedes Benz, AUdi, Land rover, Jaguar, and BMW. Brands with price diversity include Toyota, Mercedes Benz, Audi, BMW and Mahindra.
+
+```{r}
+#Boxplot of the selling price of the 10 lowest makes in the data set
+# Get the bottom 10 brands by occurrences
+bottom_10_brands = sort(make_counts, decreasing = FALSE)[1:10]
+
+# Filter the dataset for bottom 10 brands
+bottom_10_makes_df <- df[df$make %in% names(bottom_10_brands), ]
+
+# Create an interactive boxplot faceted by make for the bottom 10 brands
+boxbottom10 <- plot_ly(
+  data = bottom_10_makes_df,
+  x = ~make,
+  y = ~selling_price,
+  type = 'box',
+  color = ~make,
+  colors = "Set1"
+)
+
+boxbottom10 <- boxbottom10 %>%
+  layout(
+    title = "Boxplot of Selling Price by Bottom 10 Makes",
+    xaxis = list(title = "Vehicle Make", tickangle = -45),
+    yaxis = list(title = "Selling Price"),
+    showlegend = FALSE
+  )
+
+boxbottom10
+
+```
+
+Taking a look at the 10 least occuring brands in the data set, we see that these 10 brands tend to represent extreme selling price values. On the lower price end, there are the brands Daewoo, Opel, Opelcorsa and Premier. On the higher price end, we see Ferrari, Lamborghini, Maserati and Rolls Royce
+
+```{r}
+#mean selling price by make
+aggregate(selling_price ~ make, data = df, FUN = mean)
+
+```
+#Data Cleaning and Feature Selection
+
+```{r}
+# columns to drop. We decide to drp model as there are alot of models and we dont want to create dummy variables for all models
+#After running the model previously, we found multicollinearity to exist among the makes, so we will be dropping makes as well to reduce redundancy
+#make_Maruti, make_Chevrolet, make_Ford.... This is typical with dummy variables
+#Lasso, Ridge or clustering would be effective as these techniques aren't generally affected by multicollinearity
+cols_to_drop <- c("model", "make")
+
+
+# Drop them using dplyr
+df <- df %>%
+  select(-all_of(cols_to_drop))
+```
+
+```{r}
+str(df)
+```
+We are left with numeric variables, where Individual. Dealer, Trustmark Dealer, Diesel, Electric, LPG, Petrol, Manual, X5, and X.5 return 0 or 1.
+
+## What is Multicollinearity
+
+- **Multicollinearity** can occur when two or more variables in a model are very similar or even related
+- Multicollinearity can make it difficult to distinguish which variable is affecting the model
+- Multicollinearity has the ability to overfit the data thus preventing models from creating accurate predictions.
+
+## Examples
+
+- Height and Wingspan
+- Pregnancy and Ovaries
+- Left Foot Length and Right Foot Length
+![]("C:\Users\Owner\Documents\Rstudio\right foot left foot.png")
+
+## Problems with Multicollinearity
+
+- **Model Misspecification**: Multicollinearity can unfortunately lead to incorrect conclusions about the relationships between variables.
+- **Inflated R² with Insignificant Coefficients**: 
+  - High correlation among independent variables can artificially inflate the model’s R² value.
+  - Individual coefficients (Beta's) may not be statistically significant due to high standard errors.
+- **Difficult Interpretation**: Multicollinearity makes it hard to determine the unique contribution of each predictor to the dependent variable.
+
+## Scatterplot between two Multicollinear Variables Year and Age
+```{r}
+library(ggplot2)
+
+# Scatterplot to show the relationship
+ggplot(df, aes(x = year, y = age, color = selling_price, size = selling_price)) + 
+  geom_point(alpha = 0.7) +  # Transparency for better visualization
+  scale_color_gradient(low = "blue", high = "red") +  # Color gradient for selling price
+  labs(
+    title = "Scatterplot of Year vs Age with Selling Price",
+    x = "Year",
+    y = "Age",
+    color = "Selling Price",
+    size = "Selling Price"
+  ) +
+  theme_minimal() +  # Minimal theme for a clean look
+  theme(
+    legend.position = "right",  # Position legend
+    plot.title = element_text(hjust = 0.8, size = 20, face = "bold")  # Style title
+  )
+```
+Age and year are related variables, hense their obvious multicollinearity
+
+## Testing for Multicollinearity
+
+- Before treating multicollinearity, variables must be significant to the model
+
+- A high value of R2 and a significant F- Statistic that contradicts the t-test signals multicollinearity
+
+- In R, multicollinearity can be tested by the **correlation matrix**, **VIF**, and computing the **alias**
+
+
+
+## Correlation Matrix
+
+```{r corr_matrix, fig.width=10, fig.height=10}
+# Calculate correlation matrix
+corr_columns = df[, c("selling_price", "year", "km_driven", "mileage", "engine", "max_power", 
+                       "age", "Individual", "Trustmark.Dealer", "Diesel", "Electric", "LPG", 
+                       "Petrol", "Manual", "X5", "X.5")]
+
+corr_matrix = round(cor(corr_columns, use = "complete.obs"), 2)
+
+
+# Create annotations so we can 
+annotations = list()
+for (i in 1:nrow(corr_matrix)) {
+for (j in 1:ncol(corr_matrix)) {
+annotations = c(
+annotations, 
+list(
+list(
+x = colnames(corr_matrix)[j],
+y = rownames(corr_matrix)[i],
+text = corr_matrix[i, j],
+showarrow = FALSE,
+font = list(size = 12, color = "black")
+)
+)
+)
+}
+}
+
+# Heatmap with annotations
+plot_ly(
+  z = corr_matrix,
+  x = colnames(corr_matrix),
+  y = rownames(corr_matrix),
+  type = "heatmap",
+  colors = colorRamp(c("royalblue", "white", "red"))
+) %>%
+  layout(
+  title = "Correlation Matrix Heatmap with Annotations",
+  xaxis = list(title = "Variables"),
+  yaxis = list(title = "Variables"),
+  annotations = annotations
+  )
+```
+
+
+
+
+## Tools for Multicollinearity
+
+- The typical solution and good practice for multicollinearity is **dropping one of the variables**
+- Analyzing **Pvalues**
+- **Stepwise regression** can help eliminate variables as long as significance and Pvalues prove explanatory power to the model
+- **Variance Inflation Factor (VIF)** shows what percentage of the variance is inflated for each coefficient.
+- VIF shows the degree to which Standard Error is inflated due to collinearity
+- Dimension analysis through reduction reducing techniques like **PCA**
+- When dropping multicollinear variables, the **standard error of the regression coefficients** typically **decreases**, improving model reliability.
+
+
+## What is Variance Inflation Factor (VIF)?
+
+The Variance Inflation Factor (VIF) is calculated as:
+
+\[
+\text{VIF}(X_j) = \frac{1}{1 - R_j^2}
+\]
+
+where \(R_j^2\) is the coefficient of determination when regressing predictor \(X_j\) on all other predictors.
+
+## Interpretation of VIF
+
+- **VIF = 1:** No multicollinearity.
+- **VIF between 1 and 5:** Moderate multicollinearity.
+- **VIF > 10:** High multicollinearity- usually indicitive of collinearity problems
+- **VIF should be used more as a tool and less of a solution for multicollinearity**
+
+
+# Executing Stepwise Regression
+
+```{r}
+#Lets check the performance of the model, then
+#We are going to find VIF without doing the train and test split
+#dependent variable (y) is going to be the selling price
+#our question is to find a relationship to predict the selling price
+
+#fit the regression model
+model = lm(selling_price ~ ., data = df)
+
+#view the output of the regression model
+summary(model)
+```
+Since the pvalue of the model is small, the model in itself is significant. The Rsquared of the model is .7778 , meaning approximately 77.78% of all the variability in the selling price is being explained by all the variables. Adjusted R squared is .7777.
+Additionally,on a 95 % confidence interval, LPG is showing as not significant as a predictor of selling price as the Pvalue is extremely high and over .05 . Age is returning as NA, which is something we will explore
+
+```{r}
+alias(model)
+```
+Running the alias function, we can see that an aliased coefficient is within the "year" variable. For this reason, we are going to drop this variable and run a new model.
+```{r}
+#fit the regression model2 removing year
+model2 = lm(selling_price ~ . -year, data = df)
+
+#view the output of the regression model
+summary(model2)
+```
+As expected, there has been very little change.
+
+LPG still has a very high P value of .888902, leading us to believe that LPG is not a good predictor of sales price. We are going to drop this variable to see if it has any effect on the model.
+
+
+
+
+```{r}
+#fit the regression model2 removing year and LPG
+model3 <- lm(selling_price ~ . -year -LPG, data = df)
+
+#view the output of the regression model
+summary(model3)
+```
+
+R2 and Adjusted R2 are unchanged after dropping LPG, which is a good sign. The F statistic has increased, indicating that the group means are significantly different from each other, relative to the variability within groups and the variation explained by the model is greater than the variation within the residuals
+
+
+```{r}
+vif_results = vif(model3)
+print(vif_results)
+```
+```{r}
+## VIF values barplot
+
+
+# Convert VIF results into a data frame since ggplot will read it as such
+vif_df = data.frame(
+  Variable = names(vif_results),#x= predictors
+  VIF = as.numeric(vif_results) #y= VIF
+)
+
+# Plot the VIF values
+ggplot(vif_df, aes(x = reorder(Variable, VIF), y = VIF)) + #order by VIF values
+  geom_bar(stat = "identity", fill = "steelblue") +  # Create horizontal bar chart
+  coord_flip() +  # Flip coordinates for horizontal bars  for readability
+  geom_hline(yintercept = 10, color = "red", linetype = "dashed", lwd = 1) +  # Add dashed line at VIF = 10
+  labs(
+    title = "VIF Values for Predictors",
+    x = "Predictors",
+    y = "VIF"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 16),  # Centered and style title
+    axis.text.y = element_text(size = 10)  # Adjust y-axis text size
+  )
+
+```
+
+High VIF values exist within Petrol, which signals high multicollinearity. Earlier,we noticed that Petrol had a low Pvalue of < 2e-16 indicating significance of the Petrol variable. We are going to see what happens when we drop this variable even though the p-value is very low.
+
+```{r}
+#fit the regression model2 removing year, LPG and Petrol
+model4 = lm(selling_price ~ . -year -LPG -Petrol, data = df)
+
+#view the output of the regression model
+summary(model4)
+
+```
+ 
+ Dropping variables based on VIF without considering p-values can lead to removing statistically significant predictors. We are going to utilize model 3 as our final model.  Addressing multicollinearity often involves trade-offs, which require balancing model interpretability and predictive power which we can see from interpreting the results between model 3 and 4.
+
+```{r}
+final_model= model3
+```
+
+
+# Explaining Multicollinearity Trade Offs
+
+##Dropping variables,soley reliant on the VIF
+
+**Advantage:**
+Reduces multicollinearity, leading to more stable coefficient estimates and improved interpretability.
+**Disadvantage:**
+Risk of removing predictors that are statistically significant or meaningful to the model. For example, in Model 4, dropping Petrol (high VIF) led to a simpler model but sacrificed a significant predictor (p < 0.05). ViF is more of a diagnostic and less as a solution, as we still need to pay attention to the pvalues and significance of variables to the model.
+
+
+# How well did our model perform?
+
+```{r}
+# Predicted vs. Actual Plot
+predicted_actual_plot <- ggplot(data.frame(
+  actual = df$selling_price,
+  predicted = predict(final_model)
+), aes(x = actual, y = predicted)) +
+  geom_point(alpha = 0.5, color = "lightblue") +
+  geom_abline(intercept = 0, slope = 1, color = "red", linetype = "dashed") +
+  labs(
+    title = "Predicted vs Actual Selling Price",
+    x = "Actual Selling Price",
+    y = "Predicted Selling Price"
+  ) +
+  theme_minimal()
+print(predicted_actual_plot)
+```
+
+Our visual representation of the model is showing that the model performed well comparing the predicted values to the actual values
+
+# Which were our most influential predictors of the model ?
+
+```{r}
+# Bar Plot of Coefficients
+coefficients_df <- data.frame(
+  variable = names(coef(final_model))[-1], # Exclude intercept
+  coefficient = coef(final_model)[-1]
+)
+
+coefficients_plot <- ggplot(coefficients_df, aes(x = reorder(variable, abs(coefficient)), y = coefficient)) +
+  geom_bar(stat = "identity", fill = "navy") +
+  coord_flip() +
+  labs(
+    title = "Predictor Importance Using Model Coefficients",
+    x = "Predictors",
+    y = "Coefficient Value"
+  ) +
+  theme_minimal()
+print(coefficients_plot)
+
+```
+
+The largest and most influential feature of this data set is "Electric" followed by "Manual" which has a negative coefficient. It is re-assuring to see that "Petrol" has a high value as well for it's coefficient even though it had a high VIF value. Variables that included the lowest values are "engine", "km_driven" and "max_power".
+
+# Actionable Insights
+
+Although some multicollinearity still exists, the majority of key predictors show significant relationships with the dependent variable. By carefully dropping non-contributing or highly collinear variables, the model's interpretability and predictive performance improve without substantial loss of explanatory power. Future models could benefit from exploring feature transformations or regularization techniques to further address multicollinearity challenges. Other suggestions would be utilizing PCA, Ridge Regression, clustering, or Lasso to further enhance model robustness and address multicollinearity effectively since these techniques can handle multicollinearity.
+
